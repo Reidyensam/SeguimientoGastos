@@ -3,8 +3,7 @@ const cors = require("cors");
 const sequelize = require("./config/database");
 require("dotenv").config(); // 🔹 Cargar variables de entorno
 
-// 🔹 Definir `app` antes de usar `app.use()`
-const app = express();
+const app = express(); // 🔹 Definir `app` antes de usar `app.use()`
 
 // 🔹 Configurar CORS para permitir solicitudes del frontend
 app.use(cors({
@@ -24,23 +23,29 @@ app.use("/api/auth", authRoutes);
 app.use("/api/gastos", gastosRoutes);
 
 // 🔹 Validar conexión con la base de datos antes de iniciar el servidor
-sequelize.authenticate()
-    .then(() => {
+const iniciarServidor = async () => {
+    try {
+        await sequelize.authenticate();
         console.log("✅ Conexión con la base de datos establecida exitosamente.");
-        return sequelize.sync({ alter: true });
-    })
-    .then(() => {
+
+        await sequelize.sync({ alter: true }); // 🔹 Ajusta la estructura sin eliminar datos
         console.log("✅ Modelos sincronizados correctamente.");
-        iniciarServidor();
-    })
-    .catch(error => {
-        console.error("❌ Error al conectar la base de datos:", error);
+
+        const PORT = process.env.PORT || 3001;
+        app.listen(PORT, () => {
+            console.log(`🚀 Servidor corriendo en el puerto ${PORT}.`);
+            console.log(`📌 API de autenticación disponible en: http://localhost:${PORT}/api/auth`);
+            console.log(`📌 API de gastos disponible en: http://localhost:${PORT}/api/gastos`);
+        });
+    } catch (error) {
+        console.error("❌ Error al conectar la base de datos:", error.message);
         process.exit(1); // 🔹 Detiene el servidor si la conexión falla
-    });
+    }
+};
 
 // 🔹 Middleware global de manejo de errores
 app.use((err, req, res, next) => {
-    console.error("❌ Error en la aplicación:", err);
+    console.error("❌ Error en la aplicación:", err.message);
     res.status(err.status || 500).json({ mensaje: err.message || "Error interno del servidor." });
 });
 
@@ -49,12 +54,5 @@ app.use((req, res) => {
     res.status(404).json({ mensaje: "❌ Ruta no encontrada." });
 });
 
-// 🔹 Iniciar el servidor después de que los modelos estén sincronizados
-const iniciarServidor = () => {
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () => {
-        console.log(`🚀 Servidor corriendo en el puerto ${PORT}.`);
-        console.log(`📌 API de autenticación disponible en: http://localhost:${PORT}/api/auth`);
-        console.log(`📌 API de gastos disponible en: http://localhost:${PORT}/api/gastos`);
-    });
-};
+// 🔹 Iniciar el servidor
+iniciarServidor();
