@@ -7,17 +7,14 @@ const router = express.Router();
 // 🔹 Obtener todos los gastos del usuario autenticado
 router.get("/", verificarToken, async (req, res) => {
     try {
-        if (!req.usuario || !req.usuario.id) {
-            return res.status(403).json({ mensaje: "❌ Usuario no autenticado." });
-        }
+        const gastos = await Gasto.findAll({
+            where: { usuarioId: req.usuario.id },
+            attributes: ["id", "nombre", "monto", "categoria", "fecha"]
+        });
 
-        const gastos = await Gasto.findAll({ where: { usuarioId: req.usuario.id } });
+        console.log("📤 Gastos enviados al frontend:", gastos); // 🔹 Confirma que `nombre` se está enviando correctamente
 
-        if (!gastos.length) {
-            return res.status(200).json({ mensaje: "✅ No hay gastos registrados." });
-        }
-
-        res.json(gastos);
+        res.json(gastos.length > 0 ? gastos : []);
     } catch (error) {
         console.error("❌ Error al obtener los gastos:", error);
         res.status(500).json({ mensaje: "❌ Error interno en el servidor." });
@@ -27,13 +24,11 @@ router.get("/", verificarToken, async (req, res) => {
 // 🔹 Crear nuevo gasto
 router.post("/", verificarToken, async (req, res) => {
     try {
+        console.log("📥 Solicitud recibida en el backend:", req.body);
+        console.log("🎯 Nombre recibido en el backend:", req.body.nombre); // 🔹 Confirma que `nombre` llega correctamente
+
         const { nombre, monto, fecha, categoria } = req.body;
 
-        if (!req.usuario || !req.usuario.id) {
-            return res.status(403).json({ mensaje: "❌ Usuario no autenticado." });
-        }
-
-        // 🔹 Validaciones mejoradas
         if (!nombre?.trim()) {
             return res.status(400).json({ mensaje: "❌ Nombre inválido." });
         }
@@ -51,12 +46,14 @@ router.post("/", verificarToken, async (req, res) => {
         }
 
         const nuevoGasto = await Gasto.create({
-            nombre: nombre.trim(),
-            monto: parseFloat(monto),
-            fecha: new Date(fecha),
-            categoria: categoria.trim(),
-            usuarioId: req.usuario.id
-        });
+    nombre: req.body.nombre?.trim() || "Sin Nombre", // 🔹 Asegura que `nombre` siempre tenga un valor
+    monto: parseFloat(req.body.monto),
+    fecha: new Date(req.body.fecha),
+    categoria: req.body.categoria.trim(),
+    usuarioId: req.usuario.id
+});
+
+        console.log("✅ Gasto creado correctamente:", nuevoGasto);
 
         res.status(201).json(nuevoGasto);
     } catch (error) {
@@ -65,14 +62,11 @@ router.post("/", verificarToken, async (req, res) => {
     }
 });
 
-// 🔹 Eliminar un gasto por ID
-router.delete("/:id", verificarToken, async (req, res) => {
+// 🔹 Actualizar un gasto por ID
+router.put("/:id", verificarToken, async (req, res) => {
     try {
         const { id } = req.params;
-
-        if (!req.usuario || !req.usuario.id) {
-            return res.status(403).json({ mensaje: "❌ Usuario no autenticado." });
-        }
+        const { nombre, monto, fecha, categoria } = req.body;
 
         const gasto = await Gasto.findOne({ where: { id, usuarioId: req.usuario.id } });
 
@@ -80,7 +74,51 @@ router.delete("/:id", verificarToken, async (req, res) => {
             return res.status(404).json({ mensaje: "❌ Gasto no encontrado." });
         }
 
+        if (nombre && !nombre.trim()) {
+            return res.status(400).json({ mensaje: "❌ Nombre inválido." });
+        }
+
+        if (monto && (isNaN(monto) || Number(monto) <= 0)) {
+            return res.status(400).json({ mensaje: "❌ Monto inválido." });
+        }
+
+        if (fecha && isNaN(Date.parse(fecha))) {
+            return res.status(400).json({ mensaje: "❌ Fecha inválida." });
+        }
+
+        if (categoria && !categoria.trim()) {
+            return res.status(400).json({ mensaje: "❌ Categoría inválida." });
+        }
+
+        await gasto.update({
+            nombre: nombre?.trim() || gasto.nombre,
+            monto: monto ? parseFloat(monto) : gasto.monto,
+            fecha: fecha ? new Date(fecha) : gasto.fecha,
+            categoria: categoria?.trim() || gasto.categoria
+        });
+
+        console.log("🔄 Gasto actualizado correctamente:", gasto);
+
+        res.json({ mensaje: "✅ Gasto actualizado correctamente." });
+    } catch (error) {
+        console.error("❌ Error al actualizar el gasto:", error);
+        res.status(500).json({ mensaje: "❌ Error interno al actualizar el gasto." });
+    }
+});
+
+// 🔹 Eliminar un gasto por ID
+router.delete("/:id", verificarToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const gasto = await Gasto.findOne({ where: { id, usuarioId: req.usuario.id } });
+
+        if (!gasto) {
+            return res.status(404).json({ mensaje: "❌ Gasto no encontrado." });
+        }
+
         await gasto.destroy();
+        console.log("🗑 Gasto eliminado correctamente:", id);
+
         res.json({ mensaje: "✅ Gasto eliminado correctamente." });
     } catch (error) {
         console.error("❌ Error al eliminar el gasto:", error);
